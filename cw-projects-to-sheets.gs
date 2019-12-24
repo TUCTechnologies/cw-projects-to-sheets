@@ -1,7 +1,8 @@
 // Set API properties
-var companyId = "";
+var companyId = '';
 var publicKey = '';
 var privateKey = '';
+var clientId = '';
 var authRaw = companyId + '+' + publicKey + ':' + privateKey;
 var auth = 'Basic ' + Utilities.base64Encode(authRaw);
 
@@ -12,43 +13,56 @@ function ProjectReport() {
   var cells = "A2:F50";
   
   // Clear the existing content
-  var range = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName).getRange(cells).clearContent();
+  //var range = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName).getRange(cells).clearContent();
   
   // Display projects
   var row = 0;
-  var newrange = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName).getRange(cells);
-  var values = range.getValues();
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+  //var newrange = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName).getRange(cells);
+  //var values = range.getValues();
+  
+  //var projectParams = { "conditions": 'project/status/name="New" or project/status/name="In Progress"' };
+  //var projects = search("'project/projects",projectParams);
+  
+  // Display header
+  var row = 1;
+  sheet.getRange(row,1).setValue("Company");
+  sheet.getRange(row,2).setValue("Project");
+  sheet.getRange(row,3).setValue("Status");
+  sheet.getRange(row,4).setValue("Comments");
+  sheet.getRange(row,5).setValue("Next Ticket is...");
+  sheet.getRange(row,5).setValue("Ticket Due Date");
+  row++;
+  
+  // Display project info
   var projects = fetch("/project/projects?pagesize=100");
-  for(var projectIndex in projects) {
-    var project = projects[projectIndex];
-    
-    if(project.status.name == "New" || project.status.name == "In Progress") {
+  for each(var project in projects) {
+    var column = 1;
+    if(project.status.name == "New" || project.status.name == "In Progress" || project.status.name == "On-Hold") {
       
-      // Display project attributes
-      values[row][0] = project.company.name;
-      values[row][1] = project.name;
-      values[row][2] = project.status.name;
+      sheet.getRange(row,column).setValue(project.company.name); column++;
+      sheet.getRange(row,column).setValue(project.name); column++;
+      sheet.getRange(row,column).setValue(project.status.name); column++;
       
       // Display the latest note about project
       var notes = fetch("/project/projects/" + project.id + "/notes");
-      for (var notesIndex in notes) {
-        var note = notes[notesIndex];
-        values[row][3] = note.text;
+      for each(var note in notes) {
+        sheet.getRange(row,column).setValue(note.text);
       }
+      column++;
       
       // Display the next step in a project
-      var params = { "conditions": "project/id=" + project.id };
-      var ticketsInProject = search("/service/tickets", params);
-      for(var ticketIndex in ticketsInProject) {
-        var ticket = ticketsInProject[ticketIndex];
-        Logger.log(ticket);
+      var params = { "conditions": "project/id=" + project.id};
+      var ticketsInProject = search("/project/tickets", params);
+      for each(var ticket in ticketsInProject) {
         if(ticket.status.name == "Open" || ticket.status.name == "In Progress" || ticket.status.name == "Scheduled") { 
           
           // Display the project ticket summary with hyperlink
-          values[row][4] = '=HYPERLINK("https://api-na.myconnectwise.net/v4_6_release/services/system_io/router/openrecord.rails?locale=en_US&companyName='+companyId+'&recordType=ServiceFV&recid='+ticket.id+'","' + ticket.summary + '")';
+          sheet.getRange(row,column).setValue('=HYPERLINK("https://api-na.myconnectwise.net/v4_6_release/services/system_io/router/openrecord.rails?locale=en_US&companyName='+companyId+'&recordType=ServiceFV&recid='+ticket.id+'","' + ticket.summary + '")');
+          column++;
           
           if(ticket.requiredDate != undefined) {
-            values[row][5] = ticket.requiredDate;
+            sheet.getRange(row,column).setValue(ticket.requiredDate);
           }
           break;
         }
@@ -60,8 +74,7 @@ function ProjectReport() {
   }
   
   // Sort and display the projects
-  range.setValues(values);
-  range.sort([1,2]);
+  sheet.getRange(2,1,row,column).sort([1,2]);
   
 }
 
@@ -75,7 +88,8 @@ function fetch(path)
     method : 'get',
     contentType: "application/json",
     headers: {
-      Authorization: auth
+      Authorization: auth,
+      clientId: clientId
     },
     muteHttpExceptions: false
   };
@@ -95,12 +109,10 @@ function search(path, params)
     contentType: "application/json",
     payload: JSON.stringify(params),
     headers: {
-      Authorization: auth
+      Authorization: auth,
+      clientId: clientId
     }
   };
-  
-  Logger.log(url);
-  Logger.log(options);
   
   // Return data
   return JSON.parse(UrlFetchApp.fetch(url, options));
